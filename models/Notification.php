@@ -357,7 +357,7 @@ class Notification{
 	    }
 	    else if($verb == ActStr::VERB_AUTHORIZE){
 		    $label = Yii::app()->session['user']['name']." ".Yii::t("common","wants to administrate")." ".$target["name"];
-		    $url = $ctrl.'/directory/id/'.$target["id"].'?tpl=directory2';
+		    $url = 'element/detail/type/'. $target["type"] .'/id/'.$targetId;
 	    }
 	    else if($verb == ActStr::VERB_JOIN){
 		    $label = Yii::app()->session['user']['name']." ".Yii::t("common","participates to the event")." ".$target["name"];
@@ -413,7 +413,7 @@ class Notification{
 	    } */
 		else if($verb == ActStr::VERB_CONFIRM){
 		    $label = Yii::app()->session['user']['name']." ".Yii::t("common","just added")." ".$member["name"]." ".Yii::t("common","as admin of")." ".$target["name"];
-		    $url = $ctrl.'/directory/id/'.$target["id"].'?tpl=directory2';
+		    $url = 'element/detail/type/'. $target["type"] .'/id/'.$targetId;
 	    }
 	    else if($verb == ActStr::VERB_ACCEPT){
 		    $label = Yii::app()->session['user']['name']." ".Yii::t("common","just added")." ".$member["name"]." ".Yii::t("common","as ".$typeOfConnect." of")." ".$target["name"];
