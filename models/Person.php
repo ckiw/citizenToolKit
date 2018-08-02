@@ -160,6 +160,11 @@ class Person {
 	  	return $person;
 	}
 
+	public static function getNameById($id) { 
+		$person = PHDB::findOneById( self::COLLECTION ,$id, array("name") );
+	  	return $person;
+	}
+
 
 	/**
 	 * Retrieve a simple user (id, name, profilImageUrl) by id from DB
@@ -908,7 +913,7 @@ class Person {
 	            if ($res["msg"] == "notValidatedEmail") 
 	        		return $res;
 	        	else
-	            	$res = array("result"=>true, "id"=>$account["_id"], "isCommunected"=>isset($account["cp"]), "msg" => "Vous êtes maintenant identifié : bienvenue sur communecter.");
+	            	$res = array("result"=>true, "id"=>$account["_id"], "isCommunected"=>isset($account["cp"]), "msg" => "Vous êtes maintenant identifié. Bienvenue sur NotrAgora.");
 	        } else {
 	            $res = array("result"=>false, "msg"=>"emailAndPassNotMatch");
 	        }

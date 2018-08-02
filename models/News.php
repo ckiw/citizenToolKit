@@ -105,11 +105,17 @@ class News {
 				$news["targetIsAuthor"] = $_POST["targetIsAuthor"];
 		 	if(isset($_POST["parentType"]))
 		 	{
+
+		 		$target=array(	"id"=>$_POST["parentId"],
+		 						"type"=>$_POST["parentType"],
+		 						"value" => $_POST["text"]);
+			
 				$type=$_POST["parentType"];
 				$news["target"]["type"] = $type;
 				$from="";
 				if($type == Person::COLLECTION ){
 					$person = Person::getById($_POST["parentId"]);
+					$target["name"] = $person["name"];
 					if( isset( $person['geo'] ) )
 						$from = $person['geo'];
 					if(@$person["address"]){
@@ -123,6 +129,7 @@ class News {
 
 				}else if($type == Organization::COLLECTION ){
 					$organization = Organization::getById($_POST["parentId"]);
+					$target["name"] = $organization["name"];
 					if( isset( $organization['geo'] ) )
 						$from = $organization['geo'];
 					if(@$organization["address"]){
@@ -134,6 +141,7 @@ class News {
 				}
 				else if($type == Event::COLLECTION ){
 					$event = Event::getById($_POST["parentId"]);
+					$target["name"] = $event["name"];
 					if( isset( $event['geo'] ) )
 						$from = $event['geo'];
 					if(@$event["address"]){
@@ -145,6 +153,7 @@ class News {
 				}
 				else if($type == Project::COLLECTION ){
 					$project = Project::getById($_POST["parentId"]);
+					$target["name"] = $project["name"];
 					if( isset( $project['geo'] ) )
 						$from = $project['geo'];
 					if(@$project["address"]){
@@ -227,15 +236,26 @@ class News {
 				$news["mentions"] = $_POST["mentions"];
 				$target="";
 				if(@$_POST["parentType"]){
-					$target=array("id"=>$_POST["parentId"],"type"=>$_POST["parentType"]);
+					$target=array("id"=>$_POST["parentId"],"type"=>$_POST["parentType"], "name");
 				}
 				Notification::actionOnNews ( ActStr::VERB_MENTION, ActStr::ICON_RSS, array("id" => Yii::app()->session["userId"],"name" => Yii::app()->session["user"]["name"]) , $target, $news["mentions"] )  ;
 			}
+
 
 			PHDB::insert(self::COLLECTION,$news);
 			$news=NewsTranslator::convertParamsForNews($news);
 		    $news["author"] = Person::getSimpleUserById(Yii::app()->session["userId"]);
 
+		    
+		    if(!empty($target)){
+		    	$author = array(	"id"=> (String) $user["_id"],
+		 							"type"=>Person::COLLECTION,
+		 							"name"=> $user["name"]);
+		    	$params = Mail::createParamsMails(ActStr::VERB_POST, $target, null, $author);
+		   		Mail::mailNotif($_POST["parentId"], $_POST["parentType"], $params);
+		    }
+		    
+			
 		    /* Send email alert to contact@pixelhumain.com */
 		  	if(@$type && $type=="pixels"){
 		  		Mail::notifAdminBugMessage($news["text"]);

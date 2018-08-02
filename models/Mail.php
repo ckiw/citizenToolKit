@@ -4,6 +4,44 @@ Contains anything generix for the site
  */
 class Mail {
 
+    public static $mailTree = array( 
+                        ActStr::VERB_POST => array(
+                            "url" => "page/type/{collection}/id/{id}",
+                            "labelArray" => array("who", "where"),
+                            "label"=>"{who} wrote a message :",
+                            "icon" => "fa-rss" ),
+                        ActStr::VERB_ADD => array(
+                            "type" => array(
+                                Poi::COLLECTION=> array(
+                                    "url" => "page/type/{objectType}/id/{objectId}",
+                                    "label" => "{who} added a new production : {what}"
+                                )
+                            ),
+                            "labelArray" => array("who","where","what"),
+                            "icon" => "fa-plus"
+                        ),
+                        ActStr::VERB_COMMENT => array(
+                            "type" => array(
+                                Poi::COLLECTION => array(
+                                    "label" => "{who} commented :",
+                                ),
+                                Comment::COLLECTION => array(
+                                    "label" => "{who} answered to a comment posted",
+                                ),
+                                News::COLLECTION => array(
+                                    "label" => "{who} answered to a new posted",
+                                )
+                            ),
+                            "labelArray" => array("who","where","what"),
+                            "mail" => array(
+                                "type"=>"instantly",
+                                "to" => "author" //If orga or project to members
+                            ),
+                            "icon" => "fa-comment"
+                            //"url" => "{whatController}/detail/id/{whatId}"
+                        ),
+                    );
+
     public static function send( $params, $force = false ) {
         $account = null;
         //Check if the user has the not valid email flag
@@ -49,8 +87,8 @@ class Mail {
     	return (stripos($_SERVER['SERVER_NAME'], "127.0.0.1") === false && stripos($_SERVER['SERVER_NAME'], "localhost:8080") === false );
     }
 
-    public static function schedule( $params ) {
-        Cron::save($params);
+    public static function schedule( $params, $update = null ) {
+        Cron::save($params, $update);
     }
 
     public static function notifAdminNewUser($person) {
@@ -156,7 +194,7 @@ class Mail {
     
     public static function notifAddPersonInGroup($person, $group, $msg = null, $nameInvitor = null, $invitorUrl = null, $subject=null) {
         $invitor = Person::getSimpleUserById(Yii::app()->session["userId"]);
-
+        //Rest::json($person); exit ;
 
         if(empty($msg))
             $msg = $invitor["name"]. " vous a ajouté à ".$group["name"].".";
@@ -178,7 +216,7 @@ class Mail {
                                     "title" => self::getAppName() ,
                                     "logo" => Yii::app()->params["logoUrl"],
                                     "logo2" => Yii::app()->params["logoUrl2"],
-                                    "invitedUserId" => $person["childId"],
+                                    "invitedUserId" => Yii::app()->session["userId"],
                                     "groupName" => $group["name"],
                                     "message" => $msg)
         );
@@ -412,5 +450,161 @@ class Mail {
 
     private static function getAppName() {
         return isset(Yii::app()->params["name"]) ? Yii::app()->params["name"] : Yii::app()->name;
+    }
+
+    private static function getMailUpdate($mail) {
+    	$res = PHDB::findOne( Cron::COLLECTION, array("to" => $mail, "status" => Cron::STATUS_UPDATE) );
+        return $res ;
+    }
+
+    public static function mailNotif($parentId, $parentType, $paramsMail = null) {
+        // var_dump($parentId);
+        // var_dump($parentType);
+        // var_dump($paramsMail);exit;
+        $element = Element::getElementById( $parentId, $parentType, null, array("links", "name") );
+       
+        foreach ($element["links"]["members"] as $key => $value) {
+        	
+
+            if ($key != Yii::app()->session["userId"]) {
+
+            	$member = Element::getElementById( $key, Person::COLLECTION, null, array("email","preferences","roles") );
+
+            	if (!empty($member["email"]) && 
+                    !empty($member["preferences"]) && 
+                    !empty($member["preferences"]["mailNotif"]) &&
+                    $member["preferences"]["mailNotif"] == true ) {
+
+                    
+                    
+            		$mail = Mail::getMailUpdate($member["email"]) ;
+            		if(!empty($mail)){
+
+                        $paramTpl = self::createParamsTpl($paramsMail, $mail["tplParams"]["data"]);
+                        // var_dump($paramTpl); exit ;
+                        $mail["tplParams"]["data"] = $paramTpl ;
+            			PHDB::update(Cron::COLLECTION,
+    						array("_id" => $mail["_id"]) , 
+    						array('$set' => array("tplParams" => $mail["tplParams"]))			
+    					);
+
+            		}else{
+                        $paramTpl = self::createParamsTpl($paramsMail, null);
+                        // var_dump($paramTpl); exit ;
+            			$params = array (
+    	                    "type" => Cron::TYPE_MAIL,
+    	                    "tpl"=>'mailNotif',
+    	                    "subject" => "[".self::getAppName()."] - Nouveau message dans ".@$element["name"],
+    	                    "from"=>Yii::app()->params['adminEmail'],
+    	                    "to" => $member["email"],
+    	                    "tplParams" => array(
+    	                        "elementType" => $parentType,
+    	                        "elementName" => $element["name"],
+    	                        "userName" => @$user["name"],
+    	                        "logo"=> Yii::app()->params["logoUrl"],
+    	                        "logo2" => Yii::app()->params["logoUrl2"],
+    	                        "data" => $paramTpl)
+    	                );
+
+                        Mail::schedule($params, true);
+            		}
+            	}
+            }
+        }
+    }
+
+
+    public static function createParamsMails($verb, $target = null, $object = null, $author = null){
+        $paramsMail = Mail::$mailTree[$verb];
+        // var_dump($verb); var_dump($target["type"]); exit ;
+        if($verb == ActStr::VERB_ADD){
+            if(!empty($paramsMail["type"][$object["type"]])){
+                $type = $paramsMail["type"][$object["type"]];
+                // var_dump($target["type"]);
+                // var_dump($paramsMail["type"][$target["type"]]); exit ;
+                unset($paramsMail["type"][$object["type"]]);
+                $paramsMail = array_merge($paramsMail, $type);
+            }
+        }else{
+            if(!empty($paramsMail["type"][$target["type"]])){
+
+                $type = $paramsMail["type"][$target["type"]];
+                // var_dump($target["type"]);
+                // var_dump($paramsMail["type"][$target["type"]]); exit ;
+                unset($paramsMail["type"][$target["type"]]);
+                $paramsMail = array_merge($paramsMail, $type);
+            }
+        }
+        
+
+        $paramsMail["verb"] = $verb;
+        $paramsMail["target"]=$target;
+        $paramsMail["object"]=$object;
+        $paramsMail["author"]=$author;
+        //$paramsMail["levelType"]=$levelType;
+
+        //var_dump($paramsMail); exit;
+        return $paramsMail;
+    }
+
+
+    public static function createParamsTpl($paramsMail, $paramTpl = null){
+        //Rest::json($paramsMail); exit ;
+        $targetType = $paramsMail["target"]["type"];
+        $targetId = $paramsMail["target"]["id"];
+        $verb = $paramsMail["verb"];
+
+
+        if(empty($paramTpl))
+            $paramTpl = array();
+
+        if(empty($paramTpl[$targetType]))
+            $paramTpl[$targetType] = array();
+
+        if(empty($paramTpl[ $targetType ][ $targetId ])){
+
+            $paramTpl[ $targetType ][ $targetId ] = array( "url" => Yii::app()->getRequest()->getBaseUrl(true)."/#element.detail.type.".$targetType.".id.".$targetId,
+                                                            "name" => $paramsMail["target"]["name"]  ) ;
+        }
+
+        if(empty($paramTpl[ $targetType ][ $targetId ][ $verb ]))
+            $paramTpl[ $targetType ][ $targetId ][ $verb ] = array();
+        
+        $paramLabel = array();
+
+        foreach ($paramsMail["labelArray"] as $key => $value) {
+            if("who" == $value && !empty($paramsMail[ "author" ]) ){
+                $url = Yii::app()->getRequest()->getBaseUrl(true)."/#element.detail.type.".$paramsMail[ "author" ][ "type" ].".id.".$paramsMail[ "author" ][ "id" ] ;
+                $str = '<a href="'.$url.'" >'.$paramsMail[ "author" ][ "name" ]."</a>";
+                //$paramLabel["{".$value."}"] = $str;
+            }
+            else if("where" == $value && !empty($paramsMail[ "target" ]) ){
+                $url = Yii::app()->getRequest()->getBaseUrl(true)."/#element.detail.type.".$paramsMail[ "target" ][ "type" ].".id.".$paramsMail[ "target" ][ "id" ] ;
+                $str = '<a href="'.$url.'" >'.$paramsMail[ "target" ][ "name" ]."</a>";
+                //$paramLabel["{".$value."}"] = $paramsMail[ "target" ][ "name" ];
+                // $paramLabel["{".$value."}"]["url"] = Yii::app()->getRequest()->getBaseUrl(true)."/#element.detail.type.".$paramsMail[ "target" ][ "type" ].".id.".$paramsMail[ "target" ][ "id" ] ;
+            }
+            else if("what" == $value && !empty($paramsMail[ "object" ])){
+                $url = Yii::app()->getRequest()->getBaseUrl(true)."/#element.detail.type.".$paramsMail[ "object" ][ "type" ].".id.".$paramsMail[ "object" ][ "id" ] ;
+                $str = '<a href="'.$url.'" >'.$paramsMail[ "object" ][ "name" ]."</a>";
+                //$paramLabel["{".$value."}"] = $paramsMail[ "object" ][ "name" ];
+                // $paramLabel["{".$value."}"]["url"] = Yii::app()->getRequest()->getBaseUrl(true)."/#element.detail.type.".$paramsMail[ "object" ][ "type" ].".id.".$paramsMail[ "object" ][ "id" ] ;
+            }
+
+            $paramLabel["{".$value."}"] = $str;
+        }
+       
+
+        $info["text"] = Yii::t("mail", $paramsMail["label"], $paramLabel);
+
+
+        if( ( $verb == ActStr::VERB_COMMENT || $verb == ActStr::VERB_POST ) && !empty($paramsMail["target"]["value"] ) ) {
+            $info["value"] = $paramsMail["target"]["value"] ;
+        }
+
+        $paramTpl[ $targetType ][ $targetId ][ $verb ][] = $info ;
+
+        return $paramTpl ;
+
     }
 }

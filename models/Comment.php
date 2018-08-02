@@ -87,6 +87,28 @@ class Comment {
 			"tags" => @$comment["tags"],
 			"status" => self::STATUS_POSTED 
 		);
+		
+		//Rest::json($options); exit ;
+		$target = array(	"id"=> $comment["contextId"],
+ 							"type"=>$comment["contextType"],
+ 							"name"=> @$options["name"],
+ 							"value" => $content);
+
+		if(!empty($target)){
+			
+			$parent = Element::getParentById($target["id"], $target["type"]);
+			//Rest::json($parent); exit ;
+			$nameAuthor = Person::getNameById($userId);
+	    	$author = array(	"id"=> $userId,
+	 							"type"=> Person::COLLECTION,
+	 							"name"=> $nameAuthor["name"]);
+	    	$params = Mail::createParamsMails(ActStr::VERB_COMMENT, $target, $parent, $author);
+	    	//var_dump($params); exit;
+	   		Mail::mailNotif($parent["id"], $parent["type"], $params);
+
+	   		//exit;
+	    }
+		
 
 		if (self::canUserComment($comment["contextId"], $comment["contextType"], $userId, $options)) {
 			PHDB::insert(self::COLLECTION,$newComment);
@@ -101,6 +123,8 @@ class Comment {
 		if( in_array( $comment["contextType"] , $notificationContexts) ){
 			Notification::actionOnPerson ( ActStr::VERB_COMMENT, ActStr::ICON_COMMENT, "", array("type"=>$comment["contextType"],"id"=> $comment["contextId"]));
 		}
+
+
 		
 		//Increment comment count (can have multiple comment by user)
 		$resAction = Action::addAction($userId , $comment["contextId"], $comment["contextType"], Action::ACTION_COMMENT, false, true) ;
@@ -289,11 +313,14 @@ class Comment {
 	 */
 	public static function getCommentOptions($id, $type) {
 		$res = self::$defaultDiscussOptions;
-		
-		$collection = PHDB::findOneById( $type ,$id, array("commentOptions" => 1));
-
+		//var_dump($id); var_dump($type); exit ;
+		$collection = PHDB::findOneById( $type ,$id, array("commentOptions" => 1, "name" => 1));
+		//Rest::json($collection); exit ;
 		if (@$collection["commentOptions"]) {
 			$res = $collection["commentOptions"];
+		}
+		if (@$collection["name"]) {
+			$res["name"] = $collection["name"];
 		}
 		
 		return $res;
